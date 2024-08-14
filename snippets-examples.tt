@@ -1,0 +1,96 @@
+//depending on a borrower attribute, do it differently. 
+  [% SET alt_id = '' %]
+  [% FOREACH ba IN borrower.extended_attributes %]
+     [% IF ba.code == 'ALTID' %]
+              [% alt_id = ba.attribute %]
+     [% END %]
+  [% END %]
+
+  [% IF alt_id %]
+    //do stuffs
+  [% ELSE %]
+    //do other stuffs
+  [% END %]
+
+//if you only want to send overdues for some item types
+    //these first 2 sets need to be outside the foreach, because each foreach will make one of the numbers go up
+  [% SET all_items_count = 0 %]
+  [% SET no_send_item_count = 0 %]
+  [% FOREACH c IN overdues %]
+  //this updates the all_items_count to be whatever it was before + 1
+  [% all_items_count = all_items_count + 1 %]
+    [% IF c.item.itype == "3WLP" || c.item.itype == "3WHSP" %]
+    //this updates the no_send_item_count to be whatever it was before +1
+      [% no_send_item_count = no_send_item_count +1 %]
+    [% END %] //this ends the no_send section
+  [% END %] //end the foreach
+  //Unless all items are no send, make the notice
+  [% UNLESS ( all_items_count == no_send_item_count ) %]
+    The following item(s) is/are currently overdue:
+    [% FOREACH c IN overdues %]
+    [% NEXT IF c.item.itype == "3WLP" %] //this skips the item types that are the nosend types above
+    [% NEXT IF c.item.itype == "3WHSP" %]
+    <p>
+        TITLE: [% c.item.biblio.title %] [% IF c.item.biblio.subtitle %][% c.item.biblio.subtitle %][% END %]<br/>
+        [% IF c.item.biblio.author %]AUTHOR: [% c.item.biblio.author %]<br/>[% END %]
+        CALL NO: [% c.item.itemcallnumber %]<br/>
+        BARCODE: [% c.item.barcode %]<br/>
+        DUE: [% c.item.checkout.date_due | $KohaDates %]<br/>
+    </p>
+   [% END %]
+  [% END %]
+
+// Simpler logic for hold_slip with transfers (is the hold set to "W" (waiting) print the patron slip, otherwise print the transfer slip
+  [% IF hold.found == 'W' %]
+
+    <h5>Date: [% today | $KohaDates %]</h5>
+
+    <h3>Hold at [% branch.branchname %]</h3>
+
+    <h3>ON HOLD FOR:<h3>
+    <h1>[% borrower.surname %], [% borrower.firstname %]</h1>
+    <h1>[% borrower.cardnumber %]<h1>
+    <ul>
+    <br />
+
+    <br />
+    <h3>ITEM ON HOLD</h3>
+    <h4>[% biblio.title %]</h4>
+    <h5>[% biblio.author %]</h5>
+    <ul>
+    <li>[% item.barcode %]</li>
+    [% IF item.itemcallnumber %]<li>[% item.itemcallnumber %]</li>[% END %]
+    <li>[% hold.waitingdate | $KohaDates %]</li>
+    </ul>
+  [% ELSE %]
+
+    <h5>Date: [% today | $KohaDates %]</h5>
+
+    <h3>Transfer to [% branch.branchname %]</h3>
+
+  [% END %]
+
+//To print the default processing fee and replacement cost for an item type
+[%- USE Price -%]
+ [% item.itemtype.defaultreplacecost | $Price %]
+ [% item.itemtype.processfee | $Price %]
+
+//To show the title only if not X item type 
+  ----
+  [% IF checkout.item.itype != "BK" %]
+    [% biblio.title %]
+  [% END %]
+  ----
+
+//only print the first 6 characters of the itemcallnumber
+  [% item.itemcallnumber.substr(0,6) %]
+
+//Set the logged in branch code so it can be used for logic etc (floating collection sending ILLs out of Koha and want it to come back to the library it was sent from)
+[% SET loggedinbranchcode =  Branches.GetLoggedInBranchcode() %]
+
+//Split subtitles 
+<ol>[% FOREACH biblio IN biblios %]
+<li>
+  [% biblio.title | html %]
+   [% IF ( biblio.subtitle ) %]
+     [% FOREACH subtitle IN biblio.subtitle.split(' | ') %] [% subtitle | html %]
